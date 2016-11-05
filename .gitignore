@@ -1,0 +1,6 @@
+models/
+*.pkl
+MIRC_data/
+*.JPEG
+*.jpg
+*.png
