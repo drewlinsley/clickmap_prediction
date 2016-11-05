@@ -86,7 +86,6 @@ def ml_net_model(img_rows=480, img_cols=640, downsampling_factor_net=8, downsamp
     return model
 
 def loss(y_true, y_pred):
-    import ipdb;ipdb.set_trace()
     max_y = K.repeat_elements(K.expand_dims(K.repeat_elements(K.expand_dims(K.max(K.max(y_pred, axis=2), axis=2)), shape_r_gt, axis=-1)), shape_c_gt, axis=-1)
     return K.mean(K.square((y_pred / max_y) - y_true) / (1 - y_true + 0.1))
 
