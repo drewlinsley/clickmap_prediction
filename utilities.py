@@ -52,7 +52,7 @@ def preprocess_maps(paths, shape_r, shape_c):
     for i, path in enumerate(paths):
         original_map = misc.imread(path)
         if len(original_map.shape) > 2:
-            original_image = rgb2gray(original_image)
+            original_map = rgb2gray(original_map)
         padded_map = padding(original_map, shape_r, shape_c, 1)
         ims[i, 0] = padded_map.astype(np.float32)
         ims[i, 0] /= 255.0

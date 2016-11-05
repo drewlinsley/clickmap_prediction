@@ -19,7 +19,7 @@ nb_epoch = 20
 #########################################################################
 # TRAINING SETTINGS										            	#
 #########################################################################
-# path of training images
+# path of training mages
 imgs_train_path = 'MIRC_data/images/'
 # path of training maps
 maps_train_path = 'MIRC_data/click_maps/'

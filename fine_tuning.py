@@ -8,25 +8,27 @@ import os, sys
 from scipy import misc
 from skimage.color import rgb2gray
 import numpy as np
-from config import *
 from utilities import preprocess_images, preprocess_maps, postprocess_predictions
 from model import ml_net_model, loss
 from keras import backend as K
+import math
 
+def config():
+    # batch size
+    b_s = 10
+    # number of rows of input images
+    shape_r = 480
+    # number of cols of input images
+    shape_c = 640
+    # number of rows of predicted maps
+    shape_r_gt = int(math.ceil(shape_r / 8))
+    # number of cols of predicted maps
+    shape_c_gt = int(math.ceil(shape_c / 8))
+    # number of epochs
+    nb_epoch = 20
+    return b_s, shape_r, shape_c, shape_r_gt, shape_c_gt, nb_epoch
 
-def generator(b_s, phase_gen='train'):
-    if phase_gen == 'train':
-        images = [imgs_train_path + f for f in os.listdir(imgs_train_path) if f.endswith('.JPEG')]
-        maps = [maps_train_path + f for f in os.listdir(maps_train_path) if f.endswith('.JPEG')]
-    elif phase_gen == 'val':
-        images = [imgs_val_path + f for f in os.listdir(imgs_val_path) if f.endswith('.JPEG')]
-        maps = [maps_val_path + f for f in os.listdir(maps_val_path) if f.endswith('.JPEG')]
-    else:
-        raise NotImplementedError
-
-    images.sort()
-    maps.sort()
-
+def generator(b_s, images, maps, shape_r, shape_c, shape_r_gt, shape_c_gt):
     counter = 0
     while True:
         yield preprocess_images(images[counter:counter + b_s], shape_r, shape_c), preprocess_maps(maps[counter:counter + b_s], shape_r_gt, shape_c_gt)
@@ -71,7 +73,17 @@ def reset_model(model):
             model.layers[idx] = layer
     return model
 
-def finetune_model(input_images,weight_path,output_folder):
+def finetune_model(train_iters,val_iters,training_image_path,training_map_path,weight_path,output_folder):
+    #config settings
+    imgs_train_path = training_image_path
+    maps_train_path = training_map_path
+    nb_imgs_train = train_iters
+    #imgs_val_path = training_image_path
+    #maps_val_path = training_map_path
+    #nb_imgs_val = val_iters
+    b_s, shape_r, shape_c, shape_r_gt, shape_c_gt, nb_epoch = config()
+
+    #start finetunings
     model = ml_net_model(img_cols=shape_c, img_rows=shape_r, downsampling_factor_product=10,weight_path=weight_path)
     datagen = ImageDataGenerator()
     sgd = SGD(lr=1e-4, decay=0.0005, momentum=0.9, nesterov=True)
@@ -81,9 +93,8 @@ def finetune_model(input_images,weight_path,output_folder):
     print(weight_path)
     model.load_weights(weight_path + '/mlnet_salicon_weights.pkl')
     model = prepare_finetune(model,4,sgd)
-    import ipdb;ipdb.set_trace()
-    for X_train, Y_train in generator(b_s=b_s):
-        for X_batch, Y_batch in datagen.flow(X_train, Y_train, batch_size=32): # these are chunks of 32 samples
+    for X_train, Y_train in generator(b_s, imgs_train_path, imgs_train_path, shape_r, shape_c, shape_r_gt, shape_c_gt):
+        for X_batch, Y_batch in datagen.flow(X_train, Y_train, batch_size=b_s):
             it_loss = model.train_on_batch(X_batch, Y_batch)
             print(it_loss)
             #Figure out how to checkpoint the model here
