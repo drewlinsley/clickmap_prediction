@@ -82,12 +82,11 @@ def finetune_model(prog_path,nb_epoch,train_iters,val_iters,training_image_path,
     #prepare model
     timestamp = time.localtime()
     timestamp = prog_path + 'checkpoints/'  + str(timestamp.tm_mon) + '_' + str(timestamp.tm_mday) + '_' + str(timestamp.tm_hour) + '_' + str(timestamp.tm_min)
-    print('Finetuning model')
     if not os.path.exists(timestamp):
         os.makedirs(timestamp)
-
+    print('Finetuning model')
     epoch_count = 0
-    for X_train, Y_train in generator(b_s, imgs_train_path, imgs_train_path, shape_r, shape_c, shape_r_gt, shape_c_gt):
+    for X_train, Y_train in generator(b_s, imgs_train_path, maps_train_path, shape_r, shape_c, shape_r_gt, shape_c_gt):
 	ep_loss = 0
 	num_batches = 0
         for X_batch, Y_batch in datagen.flow(X_train, Y_train, batch_size=b_s):
