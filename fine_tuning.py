@@ -85,17 +85,15 @@ def finetune_model(prog_path,nb_epoch,train_iters,val_iters,training_image_path,
     if not os.path.exists(timestamp):
         os.makedirs(timestamp)
     print('Finetuning model')
-    epoch_count = 0
-    for X_train, Y_train in generator(b_s, imgs_train_path, maps_train_path, shape_r, shape_c, shape_r_gt, shape_c_gt):
+    for ep in range(nb_epoch):
 	ep_loss = 0
 	num_batches = 0
-        for X_batch, Y_batch in datagen.flow(X_train, Y_train, batch_size=b_s):
-            ep_loss += model.train_on_batch(X_batch, Y_batch)
+        for X_train, Y_train in generator(b_s, imgs_train_path, maps_train_path, shape_r, shape_c, shape_r_gt, shape_c_gt):
+            ep_loss += model.train_on_batch(X_train, Y_train)
             num_batches += 1
-        print('mean loss across batches', ep_loss / num_batches)
-        model_pointer = timestamp + '/' + epoch_count
+            print('mean loss across batches', ep_loss / num_batches)
+            model_pointer = timestamp + '/' + str(ep)
         save_model(model,model_pointer)
-        epoch_count += 1
     return model_pointer
 
 def produce_maps(weight_path, imgs_test_path, output_folder):
