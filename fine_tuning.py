@@ -14,6 +14,7 @@ import numpy as np
 from utilities import preprocess_images, preprocess_maps, postprocess_predictions
 from keras import backend as K
 from model import ml_net_model, loss
+from keras.models import load_model
 
 
 def generator(b_s, images, maps, shape_r, shape_c, shape_r_gt, shape_c_gt,shuffle=True):
@@ -58,7 +59,7 @@ def reset_model(model):
             model.layers[idx] = layer
     return model
 
-def finetune_model(prog_path,nb_epoch,train_iters,val_iters,training_image_path,training_map_path,weight_path,output_folder,shuffle=True):
+def finetune_model(prog_path,nb_epoch,train_iters,val_iters,training_image_path,training_map_path,weight_path,output_folder,test_images,test_output,shuffle=True):
     #config settings
     imgs_train_path = training_image_path
     maps_train_path = training_map_path
@@ -112,12 +113,31 @@ def finetune_model(prog_path,nb_epoch,train_iters,val_iters,training_image_path,
         print('mean loss across batches', ep_loss / num_batches)
         model_pointer = timestamp + '/' + str(ep) + '.h5'
         model.save(model_pointer)
-    return model_pointer
 
-def produce_maps(weight_path, imgs_test_path, output_folder):
-    sgd = SGD(lr=1e-3, decay=0.0005, momentum=0.9, nesterov=True)
-    print("Compile ML-Net Model")
-    model.compile(sgd, loss)
+    #Now make predictions
+    prediction_paths = make_predictions(model,test_images,test_output)
+    return model_pointer, prediction_paths
+
+def make_predictions(model,imgs_test_path,output_folder):
+    print("Predict saliency maps for " + imgs_test_path)
+    predictions = model.predict_generator(generator_test(b_s=1, imgs_test_path=imgs_test_path), nb_imgs_test)
+    prediction_paths = []
+    for pred, name in zip(predictions, imgs_test_path):
+        original_image = misc.imread(name)
+        if len(original_image.shape) > 2:
+            original_image = rgb2gray(original_image)
+        res = postprocess_predictions(pred[0], original_image.shape[0], original_image.shape[1])
+        im_name = re.split('/',imgs_test_path)[-1]
+        pred_name = output_folder + im_name
+        misc.imsave(pred_name, res.astype(int))
+        prediction_paths.append(pred_name)
+    return prediction_paths
+
+def produce_maps(weight_path, checkpoint_path, imgs_test_path, output_folder):
+    #model = ml_net_model(img_cols=shape_c, img_rows=shape_r, downsampling_factor_product=10,weight_path=weight_path)
+    #sgd = SGD(lr=1e-3, decay=0.0005, momentum=0.9, nesterov=True)
+    #print("Compile ML-Net Model")
+    #model.compile(sgd, loss)
 
     # path of output folder
     if not os.path.exists(output_folder):
@@ -126,8 +146,8 @@ def produce_maps(weight_path, imgs_test_path, output_folder):
     nb_imgs_test = len(imgs_test_path)
 
     print("Load weights ML-Net")
-    #Look into the database for the current model checkpoint
-    model.load_weights(weight_path)
+    model = load_model(checkpoint_path) #loading from the finetuned model
+    #model.load_weights(checkpoint_path)
 
     print("Predict saliency maps for " + imgs_test_path)
     predictions = model.predict_generator(generator_test(b_s=1, imgs_test_path=imgs_test_path), nb_imgs_test)
