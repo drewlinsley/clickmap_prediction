@@ -88,11 +88,13 @@ def finetune_model(prog_path,nb_epoch,train_iters,val_iters,training_image_path,
     for ep in range(nb_epoch):
 	ep_loss = 0
 	num_batches = 0
+        batch_estimate = np.round(len(imgs_train_path) / b_s)
         for X_train, Y_train in generator(b_s, imgs_train_path, maps_train_path, shape_r, shape_c, shape_r_gt, shape_c_gt):
             ep_loss += model.train_on_batch(X_train, Y_train)
             num_batches += 1
-            print('mean loss across batches', ep_loss / num_batches)
-            model_pointer = timestamp + '/' + str(ep)
+	    print(str(num_batches) + '/' + str(batch_estimate))
+        print('mean loss across batches', ep_loss / num_batches)
+        model_pointer = timestamp + '/' + str(ep)
         save_model(model,model_pointer)
     return model_pointer
 
