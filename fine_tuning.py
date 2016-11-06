@@ -119,8 +119,8 @@ def finetune_model(prog_path,nb_epoch,train_iters,val_iters,training_image_path,
     return model_pointer, prediction_paths
 
 def make_predictions(model,imgs_test_path,output_folder):
-    print("Predict saliency maps for " + imgs_test_path)
-    predictions = model.predict_generator(generator_test(b_s=1, imgs_test_path=imgs_test_path), nb_imgs_test)
+    nb_imgs_test = len(imgs_test_path)
+    predictions = model.predict_generator(generator_test(1, imgs_test_path), nb_imgs_test)
     prediction_paths = []
     for pred, name in zip(predictions, imgs_test_path):
         original_image = misc.imread(name)
@@ -149,7 +149,6 @@ def produce_maps(weight_path, checkpoint_path, imgs_test_path, output_folder):
     model = load_model(checkpoint_path) #loading from the finetuned model
     #model.load_weights(checkpoint_path)
 
-    print("Predict saliency maps for " + imgs_test_path)
     predictions = model.predict_generator(generator_test(b_s=1, imgs_test_path=imgs_test_path), nb_imgs_test)
     prediction_paths = []
     for pred, name in zip(predictions, imgs_test_path):
