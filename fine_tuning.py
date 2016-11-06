@@ -17,19 +17,8 @@ from model import ml_net_model, loss
 
 
 def generator(b_s, images, maps, shape_r, shape_c, shape_r_gt, shape_c_gt,shuffle=True):
-    if shuffle:
-        rand_order = np.arange(len(images))
-        np.random.shuffle(rand_order)
-	ar_images = np.asarray(images)
-        ar_maps = np.asarray(maps)
-        ar_images = ar_images[rand_order]
-        ar_maps = ar_maps[rand_order]
-        images = ar_images.tolist()
-        maps = ar_maps.tolist()        
     counter = 0
     while True:
-        if counter + b_s >= images:
-            break#% len(images)
         yield preprocess_images(images[counter:counter + b_s], shape_r, shape_c), preprocess_maps(maps[counter:counter + b_s], shape_r_gt, shape_c_gt)
         counter = (counter + b_s)
 
@@ -69,7 +58,7 @@ def reset_model(model):
             model.layers[idx] = layer
     return model
 
-def finetune_model(prog_path,nb_epoch,train_iters,val_iters,training_image_path,training_map_path,weight_path,output_folder):
+def finetune_model(prog_path,nb_epoch,train_iters,val_iters,training_image_path,training_map_path,weight_path,output_folder,shuffle=True):
     #config settings
     imgs_train_path = training_image_path
     maps_train_path = training_map_path
@@ -99,14 +88,30 @@ def finetune_model(prog_path,nb_epoch,train_iters,val_iters,training_image_path,
 	ep_loss = 0
 	num_batches = 0
         batch_estimate = int(np.ceil(len(imgs_train_path) / b_s))
-        for X_train, Y_train in generator(b_s, imgs_train_path, maps_train_path, shape_r, shape_c, shape_r_gt, shape_c_gt):
-            ep_loss += model.train_on_batch(X_train, Y_train)
-            num_batches += 1
-	    sys.stdout.write('\r' + str(num_batches) + '/' + str(batch_estimate))
-            sys.stdout.flush()
+        if shuffle:
+            rand_order = np.arange(len(imgs_train_path))
+            np.random.shuffle(rand_order)
+            ar_images = np.asarray(imgs_train_path)
+            ar_maps = np.asarray(maps_train_path)
+            ar_images = ar_images[rand_order]
+            ar_maps = ar_maps[rand_order]
+            it_imgs_train_path = ar_images.tolist()
+            it_maps_train_path = ar_maps.tolist()
+        else:
+            it_imgs_train_path = np.copy(it_imgs_train_path).tolist()
+            it_maps_train_path = np.copy(it_maps_train_path).tolist()
+
+        for X_train, Y_train in generator(b_s, it_imgs_train_path, it_maps_train_path, shape_r, shape_c, shape_r_gt, shape_c_gt):
+            if X_train.shape[0] == 0:
+                break
+            else:
+                ep_loss += model.train_on_batch(X_train, Y_train)
+                num_batches += 1
+	        sys.stdout.write('\r' + str(num_batches) + '/' + str(batch_estimate))
+                sys.stdout.flush()
         print('mean loss across batches', ep_loss / num_batches)
         model_pointer = timestamp + '/' + str(ep) + '.h5'
-        save_model(model,model_pointer)
+        model.save(model_pointer)
     return model_pointer
 
 def produce_maps(weight_path, imgs_test_path, output_folder):
