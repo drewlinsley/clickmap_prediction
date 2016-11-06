@@ -4,3 +4,4 @@ MIRC_data/
 *.JPEG
 *.jpg
 *.png
+*.pyc
