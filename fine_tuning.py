@@ -83,7 +83,7 @@ def finetune_model(prog_path,nb_epoch,train_iters,val_iters,training_image_path,
     timestamp = prog_path + 'checkpoints/'  + str(timestamp.tm_mon) + '_' + str(timestamp.tm_mday) + '_' + str(timestamp.tm_hour) + '_' + str(timestamp.tm_min)
     if not os.path.exists(timestamp):
         os.makedirs(timestamp)
-    print('Finetuning model')
+    print('Finetuning model for ' + str(nb_epoch) + ' epochs')
     for ep in range(nb_epoch):
 	ep_loss = 0
 	num_batches = 0
