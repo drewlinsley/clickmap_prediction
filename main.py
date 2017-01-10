@@ -117,7 +117,7 @@ if __name__ == '__main__':
 
         model.compile(sgd, loss)
         # path of output folder
-        output_folder = 'predictions/'
+        output_folder = 'lmdb_validations/'
 
         if len(sys.argv) < 3:
             raise SyntaxError
