@@ -28,34 +28,58 @@ def padding(img, shape_r=480, shape_c=640, channels=3):
     return img_padded
 
 
-def preprocess_images(paths, shape_r, shape_c):
+def augment_image(image, augmentations):
+    """Concatenate augmented versions on this batch.
+    These are commutative so it's ok that they're in this order """
+
+    if 'lr_flip' in augmentations:
+        image = np.fliplr(np.squeeze(image))
+
+    if 'noise' in augmentations:
+        hw = image.shape
+        if len(hw) > 2:
+            noise_image = np.repeat(
+                (np.random.rand(hw[0], hw[1])
+                    * 2 - 1)[:, :, None], hw[2], axis=-1)
+        else:
+            noise_image = np.random.rand(hw[0],hw[1]) * 2 - 1
+        image += noise_image
+
+    return image
+
+
+def preprocess_images(paths, shape_r, shape_c, augmentation_index, augmentations=None):
     ims = np.zeros((len(paths), shape_r, shape_c, 3))
 
     for i, path in enumerate(paths):
         original_image = misc.imread(path)
         if len(original_image.shape) < 3:
-            original_image = np.repeat(original_image[:,:,None],3,axis=2)
+            original_image = np.repeat(original_image[: , :, None], 3, axis=2)
         padded_image = padding(original_image, shape_r, shape_c, 3)
+        if augmentations is not None:
+            if augmentation_index[i]:
+                padded_image = augment_image(padded_image,augmentations)
         ims[i] = padded_image
 
     ims[:, :, :, 0] -= 103.939
     ims[:, :, :, 1] -= 116.779
     ims[:, :, :, 2] -= 123.68
     ims = ims.transpose((0, 3, 1, 2))
-
     return ims
 
 
-def preprocess_maps(paths, shape_r, shape_c):
+def preprocess_maps(paths, shape_r, shape_c, augmentation_index, augmentations=None):
     ims = np.zeros((len(paths), 1, shape_r, shape_c))
 
     for i, path in enumerate(paths):
         original_map = misc.imread(path)
         if len(original_map.shape) > 2:
             original_map = rgb2gray(original_map)
-        padded_map = padding(original_map, shape_r, shape_c, 1)
-        ims[i, 0] = padded_map.astype(np.float32)
-        ims[i, 0] /= 255.0
+        padded_map = padding(original_map, shape_r, shape_c, 1).astype(np.float32)
+        if augmentations is not None:
+            if augmentation_index[i]:
+                padded_map = augment_image(padded_map, augmentations)
+        ims[i, 0] = padded_map / 255.0
 
     return ims
 

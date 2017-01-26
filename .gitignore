@@ -1,8 +1,12 @@
 checkpoints/
 models/
+model_checkpoints/
+model_click_overlays/
+model_click_predictions/
 *.pkl
 MIRC_data/
 *.JPEG
 *.jpg
 *.png
 *.pyc
+*.h5

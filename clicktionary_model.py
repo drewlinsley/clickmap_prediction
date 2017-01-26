@@ -1,14 +1,14 @@
 from __future__ import division
 from keras.models import Model
-from keras.layers.core import Dropout, Activation
+from keras.layers.core import Dropout  # , Activation
 from keras.layers import Input, merge
 from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.regularizers import l2
 import keras.backend as K
+# from eltwise_product import EltWiseProduct
+# import math
 import h5py
-from eltwise_product import EltWiseProduct
-from model_config import shape_r_gt, shape_c_gt
-import math
+
 
 def get_weights_vgg16(f, id):
     g = f['layer_{}'.format(id)]
@@ -60,31 +60,34 @@ def ml_net_model(img_rows=480, img_cols=640, downsampling_factor_net=8, downsamp
 
 
     #########################################################
-    # ENCODING NETWORK										#
+    # ENCODING NETWORK                                      #
     #########################################################
     concatenated = merge([conv3_pool, conv4_pool, conv5_3], mode='concat', concat_axis=1)
     dropout = Dropout(0.5)(concatenated)
 
     int_conv = Convolution2D(64, 3, 3, init='glorot_normal', activation='relu', border_mode='same')(dropout)
-
-    pre_final_conv = Convolution2D(1, 1, 1, init='glorot_normal', activation='relu')(int_conv)
-
+    L2 = l2(0.01)
+    pre_final_conv = Convolution2D(1, 1, 1, init='glorot_normal', activation='relu', W_regularizer=L2, b_regularizer=L2)(int_conv)
 
     #########################################################
-    # PRIOR LEARNING										#
+    # PRIOR LEARNING                                        #
     #########################################################
-    rows_elt = math.ceil(img_rows / downsampling_factor_net) // downsampling_factor_product
-    cols_elt = math.ceil(img_cols / downsampling_factor_net) // downsampling_factor_product
-    eltprod = EltWiseProduct(init='zero', W_regularizer=l2(1/(rows_elt*cols_elt)))(pre_final_conv)
-    output_ml_net = Activation('relu')(eltprod)
+    #rows_elt = math.ceil(img_rows / downsampling_factor_net) // downsampling_factor_product
+    #cols_elt = math.ceil(img_cols / downsampling_factor_net) // downsampling_factor_product
+    #eltprod = EltWiseProduct(init='zero', W_regularizer=l2(1/(rows_elt*cols_elt)))(pre_final_conv)
+    #output_ml_net = Activation('relu')(pre_final_conv)
 
-    model = Model(input=[input_ml_net], output=[output_ml_net])
+    model = Model(input=[input_ml_net], output=[pre_final_conv])
 
     for layer in model.layers:
         print(layer.input_shape, layer.output_shape)
 
     return model
 
-def loss(y_true, y_pred,shape_r_gt,shape_c_gt):
-    max_y = K.repeat_elements(K.expand_dims(K.repeat_elements(K.expand_dims(K.max(K.max(y_pred, axis=2), axis=2)), shape_r_gt, axis=-1)), shape_c_gt, axis=-1)
-    return K.mean(K.square((y_pred / max_y) - y_true) / (1 - y_true + 0.1))
+def attention_loss(shape_r_gt,shape_c_gt):
+    def cost(y_true, y_pred):
+        max_y = K.repeat_elements(K.expand_dims(
+            K.repeat_elements(K.expand_dims(K.max(K.max(y_pred, axis=2), axis=2)), shape_r_gt, axis=-1)), shape_c_gt, axis=-1)
+        #return K.mean(K.square(y_pred - y_true))  # / (1 - y_true + 0.1))  # potentially comment out this last term
+        return K.mean(K.square((y_pred / max_y) - y_true) / (1 - y_true + 0.1))  # potentially comment out this last term
+    return cost
