@@ -165,7 +165,6 @@ def produce_maps(p, checkpoint_path, imgs_test_path):
         downsampling_factor_product=10, weight_path=p.model_init_training_weights)
     model.load_weights(checkpoint_path)
 
-    import ipdb;ipdb.set_trace()
     print("Starting predictions")
     predictions = model.predict_generator(
         generator_test(b_s=1, images=imgs_test_path,
