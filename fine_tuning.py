@@ -10,7 +10,7 @@ sys.path.append('../keras')
 from keras.optimizers import SGD, Adam
 from utilities import preprocess_images, preprocess_maps, postprocess_predictions
 from clicktionary_model import ml_net_model, attention_loss
-#from model import ml_net_model, loss
+from model import ml_net_model as original_ml_net_model
 
 
 def generator(b_s, images, maps, shape_r, shape_c, shape_r_gt, shape_c_gt, augmentations=None):
@@ -27,7 +27,7 @@ def generator(b_s, images, maps, shape_r, shape_c, shape_r_gt, shape_c_gt, augme
 def generator_test(b_s, images, shape_r, shape_c):
     counter = 0
     while True:
-        im = preprocess_images(images[counter:counter + b_s], shape_r, shape_c)
+        im = preprocess_images(images[counter:counter + b_s], shape_r, shape_c, [])
         yield im
         counter = (counter + b_s) % len(images)
 
@@ -40,21 +40,20 @@ def remove_prior(model,num_pop):
     return model
 
 
-def prepare_finetune(model,shape_r_gt, shape_c_gt, num_finetunes, sgd):
+def prepare_finetune(model, shape_r_gt, shape_c_gt, num_finetunes, optim):
     """pop unnecessary layers and initialize the trainable weights here"""
     for layer in model.layers[:len(model.layers)-num_finetunes]:
-        layer.trainable=False
+        layer.trainable = False
     model = reset_model(model)
-    model.compile(sgd, loss=attention_loss(shape_r_gt=shape_r_gt,shape_c_gt=shape_c_gt))
+    model.compile(optim, loss=attention_loss(shape_r_gt=shape_r_gt, shape_c_gt= shape_c_gt))
     return model
 
 
 def reset_model(model):
     for idx, layer in enumerate(model.layers):
-        if hasattr(layer, 'init') and layer.trainable == True:
+        if hasattr(layer, 'init') and layer.trainable==True:
             init = getattr(layer, 'init')
             new_weights = init(layer.get_weights()[0].shape).get_value()
-            #bias = K.zeros(shape=(layer.get_weights()[1].shape)).get_value()
             if len(layer.get_weights()) > 1:
                 bias = np.zeros((layer.get_weights()[1].shape)).astype(np.float32)
                 layer.set_weights([new_weights, bias])
@@ -66,28 +65,36 @@ def reset_model(model):
 
 def finetune_model(p, shape_r_gt, shape_c_gt,\
     training_image_path, training_map_path, shuffle=True,\
-    initialize_with_mlnet=False, optimizer='sgd'):
+    optimizer='sgd'):
 
     model = ml_net_model(img_cols=p.model_input_shape_c,
         img_rows=p.model_input_shape_r, downsampling_factor_product=10,
         weight_path=p.model_init_training_weights)
 
-    print("Compile ML-Net Model for finetuning")
+    print("Compile Model for finetuning")
     shape_r_gt = int(math.ceil(p.model_input_shape_r / 8))
     shape_c_gt = int(math.ceil(p.model_input_shape_c / 8))
     if optimizer == 'sgd':
         optim = SGD(lr=1e-4, decay=0.0005, momentum=0.9, nesterov=True)
     elif optimizer == 'adam':
         optim = Adam(lr=3e-4)
+
+    if p.finetune:
+        # print("Finetune from the ML-Net weights")
+        # model = prepare_finetune(model, 2, optim)  # 2 should finetune the layers devoted to eye gaze prediction
+
+        print("Loading original ML-Net")
+        ml_model = original_ml_net_model(img_cols=p.model_input_shape_c,
+        img_rows=p.model_input_shape_r, downsampling_factor_product=10,
+        weight_path=p.model_init_training_weights)
+        ml_model.load_weights(os.path.join(p.model_init_training_weights,'mlnet_salicon_weights.pkl'))  # This is questionable
+        ml_net_conv_layers =[-3,-4]
+        clickme_net_conv_layers =[-1,-2]
+        for ml, cl in zip(ml_net_conv_layers,clickme_net_conv_layers):
+            model.layers[cl].set_weights(ml_model.layers[ml].get_weights())
+
     model.compile(optim, loss=attention_loss(shape_r_gt=shape_r_gt,
         shape_c_gt=shape_c_gt))
-
-    if initialize_with_mlnet:
-        print("Load weights ML-Net")
-        model.load_weights(
-            os.path.join(p.model_init_training_weights,
-            '/mlnet_salicon_weights.pkl'))  # This is questionable
-        model = prepare_finetune(model, 3, optim)  # 3 should finetune the layers devoted to eye gaze prediction
 
     # prepare model
     timestamp = os.path.join(p.model_path, p.model_checkpoints, p.dt_string)
@@ -133,6 +140,7 @@ def finetune_model(p, shape_r_gt, shape_c_gt,\
     # prediction_paths = make_predictions(model,test_images,test_output)
     return model_pointer  # , prediction_paths
 
+
 def make_predictions(model, imgs_test_path, output_folder):
     nb_imgs_test = len(imgs_test_path)
     predictions = model.predict_generator(generator_test(1, imgs_test_path), nb_imgs_test)
@@ -149,20 +157,21 @@ def make_predictions(model, imgs_test_path, output_folder):
         prediction_paths.append(pred_name)
     return prediction_paths
 
+
 def produce_maps(p, checkpoint_path, imgs_test_path):
 
-    nb_imgs_test = len(imgs_test_path)
-
-    print("Load weights ML-Net")
+    print("Loading trained model")
     model = ml_net_model(img_cols=p.model_input_shape_c, img_rows=p.model_input_shape_r,
         downsampling_factor_product=10, weight_path=p.model_init_training_weights)
     model.load_weights(checkpoint_path)
-    # model = load_model(checkpoint_path) #loading from the finetuned model
-    # model.load_weights(checkpoint_path)
+
+    import ipdb;ipdb.set_trace()
+    print("Starting predictions")
     predictions = model.predict_generator(
         generator_test(b_s=1, images=imgs_test_path,
             shape_r=p.model_input_shape_r, shape_c=p.model_input_shape_c),
-        nb_imgs_test)
+        len(imgs_test_path))
+
     prediction_paths = []
     for pred, name in zip(predictions, imgs_test_path):
         original_image = misc.imread(name)

@@ -79,8 +79,8 @@ def ml_net_model(img_rows=480, img_cols=640, downsampling_factor_net=8, downsamp
 
     model = Model(input=[input_ml_net], output=[pre_final_conv])
 
-    for layer in model.layers:
-        print(layer.input_shape, layer.output_shape)
+    #for layer in model.layers:
+    #    print(layer.input_shape, layer.output_shape)
 
     return model
 
