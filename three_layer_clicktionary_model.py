@@ -73,36 +73,19 @@ def ml_net_model(img_rows=480, img_cols=640, downsampling_factor_net=8, downsamp
     concatenated = merge([conv3_pool, conv4_pool, conv5_3], mode='concat', concat_axis=1)
     dropout = Dropout(0.5)(concatenated)
 
-    # int_conv = Convolution2D(64, 3, 3, init='glorot_normal', activation='relu', border_mode='same')(dropout)
+    #L1
     int_conv = Convolution2D(64, 3, 3, init='glorot_normal', border_mode='same')(dropout)
-    act_conv = PReLU()(int_conv)
-    # pre_final_conv = Convolution2D(1, 1, 1, init='glorot_normal', W_regularizer=L2, b_regularizer=L2)(int_conv)
-    # pre_final_conv = Convolution2D(1, 1, 1, init='glorot_normal', activation='sigmoid', W_regularizer=L2, b_regularizer=L2)(int_conv)
-    # pre_final_conv = Convolution2D(1, 1, 1, init='glorot_normal', activation=, W_regularizer=L2, b_regularizer=L2)(int_conv)
-    pre_final_conv = Convolution2D(1, 1, 1, init='glorot_normal', border_mode='same')(act_conv)
-    act_conv = PReLU()(pre_final_conv)
-    #act_conv = K.square(PReLU())(pre_final_conv)
-    norm_layer = BatchNormalization()(act_conv)
-    # norm_layer = BatchNormalization()(pre_final_conv)
-    #########################################################
-    # PRIOR LEARNING                                        #
-    #########################################################
-    #rows_elt = math.ceil(img_rows / downsampling_factor_net) // downsampling_factor_product
-    #cols_elt = math.ceil(img_cols / downsampling_factor_net) // downsampling_factor_product
-    #eltprod = EltWiseProduct(init='zero', W_regularizer=l2(1/(rows_elt*cols_elt)))(pre_final_conv)
-    #output_ml_net = Activation(LeakyReLU)(pre_final_conv)
-
-    # model = Model(input=[input_ml_net], output=[pre_final_conv])
-    # final_conv = Convolution2D(1, 1, 1, init='glorot_normal', activation=sq_relu, W_regularizer=L2, b_regularizer=L2)(pre_final_conv)
-    #final_conv = Convolution2D(1, 1, 1, init='glorot_normal', activation='sigmoid')(norm_layer)
-    final_conv = Convolution2D(1, 1, 1, init='glorot_normal', activation='relu')(norm_layer)
-    # act_final = ELU()(final_conv)
-
-    # Add a skip connection
-    skip_final_conv = merge([norm_layer, final_conv], mode="sum")
-
-    # model = Model(input=[input_ml_net], output=[final_conv])
-    model = Model(input=[input_ml_net], output=[skip_final_conv])
+    norm_layer = BatchNormalization()(int_conv)
+    act_conv = PReLU()(norm_layer)
+    skip_l2 = merge([int_conv, act_conv], mode="sum")
+    #L2
+    int_conv_l2 = Convolution2D(64, 3, 3, init='glorot_normal', border_mode='same')(skip_l2)
+    norm_layer_l2 = BatchNormalization()(int_conv_l2)
+    act_conv_l2 = PReLU()(norm_layer_l2)
+    skip_l3 = merge([int_conv_l2,act_conv_l2], mode="sum")
+    #Finish
+    final_conv = Convolution2D(1, 1, 1, init='glorot_normal', activation='relu')(skip_l3)
+    model = Model(input=[input_ml_net], output=[final_conv])
 
     #for layer in model.layers:
     #    print(layer.input_shape, layer.output_shape)

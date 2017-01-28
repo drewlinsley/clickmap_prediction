@@ -11,7 +11,8 @@ sys.path.append('../keras')
 from keras.optimizers import SGD, Adam
 from utilities import preprocess_images, preprocess_maps, postprocess_predictions,\
     preprocess_h5_images,preprocess_h5_maps
-from clicktionary_model import ml_net_model, attention_loss
+# from clicktionary_model import ml_net_model, attention_loss
+from three_layer_clicktionary_model import ml_net_model, attention_loss
 from model import ml_net_model as original_ml_net_model
 
 
@@ -107,7 +108,6 @@ def finetune_model(p, shape_r_gt, shape_c_gt,\
     #model.compile(optim, loss=attention_loss(shape_r_gt=shape_r_gt,
     #    shape_c_gt=shape_c_gt))
     model.compile(optim, loss='mse')
-
 
     # prepare model
     timestamp = os.path.join(p.model_path, p.model_checkpoints, p.dt_string)
