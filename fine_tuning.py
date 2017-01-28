@@ -3,24 +3,35 @@ import os
 import sys
 import re
 import math
+import h5py
 import numpy as np
-from scipy import misc
+from scipy import misc, stats
 from skimage.color import rgb2gray
 sys.path.append('../keras')
 from keras.optimizers import SGD, Adam
-from utilities import preprocess_images, preprocess_maps, postprocess_predictions
+from utilities import preprocess_images, preprocess_maps, postprocess_predictions,\
+    preprocess_h5_images,preprocess_h5_maps
 from clicktionary_model import ml_net_model, attention_loss
 from model import ml_net_model as original_ml_net_model
 
 
-def generator(b_s, images, maps, shape_r, shape_c, shape_r_gt, shape_c_gt, augmentations=None):
+def generator(b_s, images, maps, shape_r, shape_c, shape_r_gt, shape_c_gt, augmentations=None, h5_path=None):
     counter = 0
     while True:
         im_batch = images[counter:counter + b_s]
         map_batch = maps[counter:counter + b_s]
-        augmentation_index = np.random.rand(len(im_batch)) > .5  #uniform random augmentations
-        yield preprocess_images(im_batch, shape_r, shape_c, augmentation_index, augmentations=augmentations),\
-            preprocess_maps(map_batch, shape_r_gt, shape_c_gt, augmentation_index, augmentations=augmentations)
+        augmentation_index = np.random.rand(len(im_batch)) > .5  # uniform random augmentations
+        if h5_path is not None:
+            loaded_h5 = h5py.File(h5_path, 'r')
+            yield preprocess_h5_images('images', loaded_h5, shape_r, shape_c,
+                augmentation_index, augmentations=augmentations),\
+                preprocess_h5_maps('maps', loaded_h5, shape_r_gt, shape_c_gt,
+                    augmentation_index, augmentations=augmentations)
+        else:
+            yield preprocess_images(im_batch, shape_r, shape_c,
+                augmentation_index, augmentations=augmentations),\
+                preprocess_maps(map_batch, shape_r_gt, shape_c_gt,
+                    augmentation_index, augmentations=augmentations)
         counter = (counter + b_s)
 
 
@@ -65,7 +76,7 @@ def reset_model(model):
 
 def finetune_model(p, shape_r_gt, shape_c_gt,\
     training_image_path, training_map_path, shuffle=True,\
-    optimizer='sgd'):
+    train_h5_path=None, val_data=None):
 
     model = ml_net_model(img_cols=p.model_input_shape_c,
         img_rows=p.model_input_shape_r, downsampling_factor_product=10,
@@ -74,9 +85,9 @@ def finetune_model(p, shape_r_gt, shape_c_gt,\
     print("Compile Model for finetuning")
     shape_r_gt = int(math.ceil(p.model_input_shape_r / 8))
     shape_c_gt = int(math.ceil(p.model_input_shape_c / 8))
-    if optimizer == 'sgd':
-        optim = SGD(lr=1e-4, decay=0.0005, momentum=0.9, nesterov=True)
-    elif optimizer == 'adam':
+    if p.optimizer == 'sgd':
+        optim = SGD(lr=1e-2, decay=0.0005, momentum=0.9, nesterov=True)
+    elif p.optimizer == 'adam':
         optim = Adam(lr=3e-4)
 
     if p.finetune:
@@ -93,8 +104,10 @@ def finetune_model(p, shape_r_gt, shape_c_gt,\
         for ml, cl in zip(ml_net_conv_layers,clickme_net_conv_layers):
             model.layers[cl].set_weights(ml_model.layers[ml].get_weights())
 
-    model.compile(optim, loss=attention_loss(shape_r_gt=shape_r_gt,
-        shape_c_gt=shape_c_gt))
+    #model.compile(optim, loss=attention_loss(shape_r_gt=shape_r_gt,
+    #    shape_c_gt=shape_c_gt))
+    model.compile(optim, loss='mse')
+
 
     # prepare model
     timestamp = os.path.join(p.model_path, p.model_checkpoints, p.dt_string)
@@ -106,6 +119,7 @@ def finetune_model(p, shape_r_gt, shape_c_gt,\
         ep_loss = 0
         prev_loss = 0
         num_batches = 0
+        val_scores = []
         batch_estimate = int(np.ceil(len(training_image_path) / p.batch_size))
         if shuffle:
             rand_order = np.arange(len(training_image_path))
@@ -122,7 +136,7 @@ def finetune_model(p, shape_r_gt, shape_c_gt,\
 
         for X_train, Y_train in generator(p.batch_size, it_imgs_train_path,
             it_maps_train_path, p.model_input_shape_r, p.model_input_shape_c,
-            shape_r_gt, shape_c_gt, augmentations=p.augmentations):
+            shape_r_gt, shape_c_gt, augmentations=p.augmentations, h5_path=train_h5_path):
             if X_train.shape[0] == 0:
                 break
             else:
@@ -132,7 +146,20 @@ def finetune_model(p, shape_r_gt, shape_c_gt,\
                 ' | ' + 'Batch loss delta is: ' + str(ep_loss - prev_loss))
             prev_loss = ep_loss
             sys.stdout.flush()
-        print ' || mean loss across batches is %0.5f' % (ep_loss / num_batches)
+        if val_data is not None:
+            for bidx, (val_X_train, val_Y_train) in enumerate(generator(p.batch_size, val_data['images'], val_data['maps'],
+                p.model_input_shape_r, p.model_input_shape_c, shape_r_gt, shape_c_gt, h5_path=val_data['h5_path'])):
+                if val_X_train.shape[0] == 0:
+                    break
+                elif bidx > 0:  # Just do a single batch
+                    break
+                else:
+                    y_hats = model.predict(val_X_train)
+                    batch_val_score = np.asarray([stats.spearmanr(yhat.ravel(), ytrue.ravel()).correlation for yhat, ytrue in zip(y_hats, val_Y_train)])
+                    val_scores = np.append(val_scores, batch_val_score)
+            print ' || mean loss across batches is %0.5f || mean spearman in validation is %0.3f' % (ep_loss / num_batches, np.mean(val_scores))
+        else:
+            print ' || mean loss across batches is %0.5f' % (ep_loss / num_batches)
         model_pointer = os.path.join(timestamp, str(ep) + '.h5')
         model.save(model_pointer)
 
